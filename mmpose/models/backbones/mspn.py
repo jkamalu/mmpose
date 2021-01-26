@@ -1,4 +1,5 @@
 import copy as cp
+from collections import OrderedDict
 
 import torch.nn as nn
 import torch.nn.functional as F
@@ -382,9 +383,9 @@ class ResNetTop(nn.Module):
 
 @BACKBONES.register_module()
 class MSPN(BaseBackbone):
-    """MSPN backbone.
-        Paper ref: Li et al. "Rethinking on Multi-Stage Networks
-              for Human Pose Estimation" (CVPR 2020).
+    """MSPN backbone. Paper ref: Li et al. "Rethinking on Multi-Stage Networks
+    for Human Pose Estimation" (CVPR 2020).
+
     Args:
         unit_channels (int): Number of Channels in an upsample unit.
             Default: 256
@@ -398,6 +399,7 @@ class MSPN(BaseBackbone):
             Default: dict(type='BN')
         res_top_channels (int): Number of channels of feature from ResNetTop.
             Default: 64.
+
     Example:
         >>> from mmpose.models import MSPN
         >>> import torch
@@ -469,7 +471,25 @@ class MSPN(BaseBackbone):
         """Initialize model weights."""
         if isinstance(pretrained, str):
             logger = get_root_logger()
-            state_dict = get_state_dict(pretrained)
+            state_dict_tmp = get_state_dict(pretrained)
+            state_dict = OrderedDict()
+            state_dict['top'] = OrderedDict()
+            state_dict['bottlenecks'] = OrderedDict()
+            for k, v in state_dict_tmp.items():
+                if k.startswith('layer'):
+                    if 'downsample.0' in k:
+                        state_dict['bottlenecks'][k.replace(
+                            'downsample.0', 'downsample.conv')] = v
+                    elif 'downsample.1' in k:
+                        state_dict['bottlenecks'][k.replace(
+                            'downsample.1', 'downsample.bn')] = v
+                    else:
+                        state_dict['bottlenecks'][k] = v
+                elif k.startswith('conv1'):
+                    state_dict['top'][k.replace('conv1', 'top.0.conv')] = v
+                elif k.startswith('bn1'):
+                    state_dict['top'][k.replace('bn1', 'top.0.bn')] = v
+
             load_state_dict(
                 self.top, state_dict['top'], strict=False, logger=logger)
             for i in range(self.num_stages):
@@ -478,15 +498,15 @@ class MSPN(BaseBackbone):
                     state_dict['bottlenecks'],
                     strict=False,
                     logger=logger)
+        else:
+            for m in self.multi_stage_mspn.modules():
+                if isinstance(m, nn.Conv2d):
+                    kaiming_init(m)
+                elif isinstance(m, nn.BatchNorm2d):
+                    constant_init(m, 1)
+                elif isinstance(m, nn.Linear):
+                    normal_init(m, std=0.01)
 
-        for m in self.multi_stage_mspn.modules():
-            if isinstance(m, nn.Conv2d):
-                kaiming_init(m)
-            elif isinstance(m, nn.BatchNorm2d):
-                constant_init(m, 1)
-            elif isinstance(m, nn.Linear):
-                normal_init(m, std=0.01)
-
-        for m in self.top.modules():
-            if isinstance(m, nn.Conv2d):
-                kaiming_init(m)
+            for m in self.top.modules():
+                if isinstance(m, nn.Conv2d):
+                    kaiming_init(m)

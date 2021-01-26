@@ -1,4 +1,5 @@
 import os
+import warnings
 
 import numpy as np
 from xtcocotools.coco import COCO
@@ -48,13 +49,17 @@ class TopDownCocoWholeBodyDataset(TopDownCocoDataset):
 
         self.use_gt_bbox = data_cfg['use_gt_bbox']
         self.bbox_file = data_cfg['bbox_file']
-        self.image_thr = data_cfg['image_thr']
+        self.det_bbox_thr = data_cfg.get('det_bbox_thr', 0.0)
+        if 'image_thr' in data_cfg:
+            warnings.warn(
+                'image_thr is deprecated, '
+                'please use det_bbox_thr instead', DeprecationWarning)
+            self.det_bbox_thr = data_cfg['image_thr']
         self.use_nms = data_cfg.get('use_nms', True)
         self.soft_nms = data_cfg['soft_nms']
         self.nms_thr = data_cfg['nms_thr']
         self.oks_thr = data_cfg['oks_thr']
         self.vis_thr = data_cfg['vis_thr']
-        self.bbox_thr = data_cfg['bbox_thr']
 
         self.ann_info['flip_pairs'] = self._make_flip_pairs()
 
@@ -71,6 +76,8 @@ class TopDownCocoWholeBodyDataset(TopDownCocoDataset):
         self.left_hand_num = 21
         self.right_hand_num = 21
 
+        # 'https://github.com/jin-s13/COCO-WholeBody/blob/master/'
+        # 'evaluation/myeval_wholebody.py#L170'
         self.sigmas_body = [
             0.026, 0.025, 0.025, 0.035, 0.035, 0.079, 0.079, 0.072, 0.072,
             0.062, 0.062, 0.107, 0.107, 0.087, 0.087, 0.089, 0.089
@@ -118,7 +125,7 @@ class TopDownCocoWholeBodyDataset(TopDownCocoDataset):
         self.img_ids = self.coco.getImgIds()
         self.num_images = len(self.img_ids)
         self.id2name, self.name2id = self._get_mapping_id_name(self.coco.imgs)
-        self.dataset_name = 'coco'
+        self.dataset_name = 'coco_wholebody'
 
         self.db = self._get_db()
 
@@ -177,6 +184,7 @@ class TopDownCocoWholeBodyDataset(TopDownCocoDataset):
         objs = valid_objs
 
         rec = []
+        bbox_id = 0
         for obj in objs:
             if max(obj['keypoints']) == 0:
                 continue
@@ -200,8 +208,10 @@ class TopDownCocoWholeBodyDataset(TopDownCocoDataset):
                 'joints_3d': joints_3d,
                 'joints_3d_visible': joints_3d_visible,
                 'dataset': self.dataset_name,
-                'bbox_score': 1
+                'bbox_score': 1,
+                'bbox_id': bbox_id
             })
+            bbox_id = bbox_id + 1
 
         return rec
 

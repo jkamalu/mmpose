@@ -38,7 +38,7 @@ channel_cfg = dict(
 # model settings
 model = dict(
     type='TopDown',
-    pretrained='models/pytorch/imagenet/resnet50-renamed.pth',
+    pretrained='torchvision://resnet50',
     backbone=dict(
         type='MSPN',
         unit_channels=256,
@@ -54,15 +54,22 @@ model = dict(
         num_stages=2,
         num_units=4,
         use_prm=False,
-        norm_cfg=dict(type='BN')),
-    train_cfg=dict(loss_weights=([0.25] * 3 + [1]) * 2),
+        norm_cfg=dict(type='BN'),
+        loss_keypoint=([
+            dict(
+                type='JointsMSELoss', use_target_weight=True, loss_weight=0.25)
+        ] * 3 + [
+            dict(
+                type='JointsOHKMMSELoss',
+                use_target_weight=True,
+                loss_weight=1.)
+        ]) * 2),
+    train_cfg=dict(),
     test_cfg=dict(
         flip_test=True,
         post_process='megvii',
         shift_heatmap=False,
-        modulate_kernel=5),
-    loss_pose=([dict(type='JointsMSELoss', use_target_weight=True)] * 3 +
-               [dict(type='JointsOHKMMSELoss', use_target_weight=True)]) * 2)
+        modulate_kernel=5))
 
 data_cfg = dict(
     image_size=[192, 256],
@@ -76,9 +83,8 @@ data_cfg = dict(
     nms_thr=1.0,
     oks_thr=0.9,
     vis_thr=0.2,
-    bbox_thr=1.0,
     use_gt_bbox=False,
-    image_thr=0.0,
+    det_bbox_thr=0.0,
     bbox_file='data/coco/person_detection_results/'
     'COCO_val2017_detections_AP_H_56_person.json',
 )
@@ -108,7 +114,7 @@ train_pipeline = [
         keys=['img', 'target', 'target_weight'],
         meta_keys=[
             'image_file', 'joints_3d', 'joints_3d_visible', 'center', 'scale',
-            'rotation', 'bbox_score', 'flip_pairs', 'bbox_id'
+            'rotation', 'bbox_score', 'flip_pairs'
         ]),
 ]
 
@@ -127,7 +133,7 @@ val_pipeline = [
         ],
         meta_keys=[
             'image_file', 'center', 'scale', 'rotation', 'bbox_score',
-            'flip_pairs', 'bbox_id'
+            'flip_pairs'
         ]),
 ]
 

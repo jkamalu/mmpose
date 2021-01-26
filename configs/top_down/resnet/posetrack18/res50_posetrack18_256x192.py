@@ -45,14 +45,13 @@ model = dict(
         type='TopDownSimpleHead',
         in_channels=2048,
         out_channels=channel_cfg['num_output_channels'],
-    ),
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True)),
     train_cfg=dict(),
     test_cfg=dict(
         flip_test=True,
         post_process='default',
         shift_heatmap=True,
-        modulate_kernel=11),
-    loss_pose=dict(type='JointsMSELoss', use_target_weight=True))
+        modulate_kernel=11))
 
 data_cfg = dict(
     image_size=[192, 256],
@@ -65,9 +64,8 @@ data_cfg = dict(
     nms_thr=1.0,
     oks_thr=0.9,
     vis_thr=0.2,
-    bbox_thr=1.0,
     use_gt_bbox=True,
-    image_thr=0.4,
+    det_bbox_thr=0.4,
     bbox_file='data/posetrack18/annotations/'
     'posetrack18_val_human_detections.json',
 )

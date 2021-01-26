@@ -76,14 +76,13 @@ model = dict(
         out_channels=channel_cfg['num_output_channels'],
         num_deconv_layers=0,
         extra=dict(final_conv_kernel=1, ),
-    ),
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True)),
     train_cfg=dict(),
     test_cfg=dict(
         flip_test=True,
         post_process='unbiased',
         shift_heatmap=True,
-        modulate_kernel=11),
-    loss_pose=dict(type='JointsMSELoss', use_target_weight=True))
+        modulate_kernel=11))
 
 data_cfg = dict(
     image_size=[192, 256],
@@ -96,9 +95,8 @@ data_cfg = dict(
     nms_thr=1.0,
     oks_thr=0.9,
     vis_thr=0.2,
-    bbox_thr=1.0,
     use_gt_bbox=False,
-    image_thr=0.0,
+    det_bbox_thr=0.0,
     bbox_file='data/coco/person_detection_results/'
     'COCO_val2017_detections_AP_H_56_person.json',
 )

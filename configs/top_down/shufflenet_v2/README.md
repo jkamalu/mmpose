@@ -1,7 +1,10 @@
 # Shufflenet v2: Practical guidelines for efficient cnn architecture design
 
 ## Introduction
-```
+
+[BACKBONE]
+
+```latex
 @inproceedings{ma2018shufflenet,
   title={Shufflenet v2: Practical guidelines for efficient cnn architecture design},
   author={Ma, Ningning and Zhang, Xiangyu and Zheng, Hai-Tao and Sun, Jian},
@@ -22,8 +25,7 @@
 | [pose_shufflenetv2](/configs/top_down/shufflenet_v2/coco/shufflenetv2_coco_256x192.py)  | 256x192 | 0.599 | 0.854 | 0.663 | 0.664 | 0.899 | [ckpt](https://download.openmmlab.com/mmpose/top_down/shufflenetv2/shufflenetv2_coco_256x192-0aba71c7_20200921.pth) | [log](https://download.openmmlab.com/mmpose/top_down/shufflenetv2/shufflenetv2_coco_256x192_20200921.log.json) |
 | [pose_shufflenetv2](/configs/top_down/shufflenet_v2/coco/shufflenetv2_coco_384x288.py)  | 384x288 | 0.636 | 0.865 | 0.705 | 0.697 | 0.909 | [ckpt](https://download.openmmlab.com/mmpose/top_down/shufflenetv2/shufflenetv2_coco_384x288-fb38ac3a_20200921.pth) | [log](https://download.openmmlab.com/mmpose/top_down/shufflenetv2/shufflenetv2_coco_384x288_20200921.log.json) |
 
-
-#### Results on MPII val set.
+#### Results on MPII val set
 
 | Arch  | Input Size | Mean | Mean@0.1   | ckpt    | log     |
 | :--- | :--------: | :------: | :------: |:------: |:------: |

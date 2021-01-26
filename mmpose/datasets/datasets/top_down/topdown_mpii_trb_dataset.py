@@ -21,6 +21,50 @@ class TopDownMpiiTrbDataset(TopDownBaseDataset):
     The dataset loads raw features and apply specified transforms
     to return a dict containing the image tensors and other information.
 
+    MPII-TRB keypoint indexes::
+
+        0: 'left_shoulder'
+        1: 'right_shoulder'
+        2: 'left_elbow'
+        3: 'right_elbow'
+        4: 'left_wrist'
+        5: 'right_wrist'
+        6: 'left_hip'
+        7: 'right_hip'
+        8: 'left_knee'
+        9: 'right_knee'
+        10: 'left_ankle'
+        11: 'right_ankle'
+        12: 'head'
+        13: 'neck'
+
+        14: 'right_neck'
+        15: 'left_neck'
+        16: 'medial_right_shoulder'
+        17: 'lateral_right_shoulder'
+        18: 'medial_right_bow'
+        19: 'lateral_right_bow'
+        20: 'medial_right_wrist'
+        21: 'lateral_right_wrist'
+        22: 'medial_left_shoulder'
+        23: 'lateral_left_shoulder'
+        24: 'medial_left_bow'
+        25: 'lateral_left_bow'
+        26: 'medial_left_wrist'
+        27: 'lateral_left_wrist'
+        28: 'medial_right_hip'
+        29: 'lateral_right_hip'
+        30: 'medial_right_knee'
+        31: 'lateral_right_knee'
+        32: 'medial_right_ankle'
+        33: 'lateral_right_ankle'
+        34: 'medial_left_hip'
+        35: 'lateral_left_hip'
+        36: 'medial_left_knee'
+        37: 'lateral_left_knee'
+        38: 'medial_left_ankle'
+        39: 'lateral_left_ankle'
+
     Args:
         ann_file (str): Path to the annotation file.
         img_prefix (str): Path to a directory where images are held.
@@ -43,10 +87,10 @@ class TopDownMpiiTrbDataset(TopDownBaseDataset):
 
         # flip_pairs in MPII-TRB
         self.ann_info['flip_pairs'] = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9],
-                                       [10, 11], [14, 15]]
-        for i in range(6):
-            self.ann_info['flip_pairs'].append([16 + i, 22 + i])
-            self.ann_info['flip_pairs'].append([28 + i, 34 + i])
+                                       [10, 11], [14, 15], [16, 22], [28, 34],
+                                       [17, 23], [29, 35], [18, 24], [30, 36],
+                                       [19, 25], [31, 37], [20, 26], [32, 38],
+                                       [21, 27], [33, 39]]
 
         self.ann_info['upper_body_ids'] = [0, 1, 2, 3, 4, 5, 12, 13]
         self.ann_info['lower_body_ids'] = [6, 7, 8, 9, 10, 11]
@@ -59,6 +103,7 @@ class TopDownMpiiTrbDataset(TopDownBaseDataset):
         self.ann_info['joint_weights'] = np.ones(
             (self.ann_info['num_joints'], 1), dtype=np.float32)
 
+        self.dataset_name = 'mpii_trb'
         self.db = self._get_db(ann_file)
         self.image_set = set(x['image_file'] for x in self.db)
         self.num_images = len(self.image_set)
@@ -72,12 +117,13 @@ class TopDownMpiiTrbDataset(TopDownBaseDataset):
             data = json.load(f)
         tmpl = dict(
             image_file=None,
+            bbox_id=None,
             center=None,
             scale=None,
             rotation=0,
             joints_3d=None,
             joints_3d_visible=None,
-            dataset='mpii_trb')
+            dataset=self.dataset_name)
 
         imid2info = {
             int(osp.splitext(x['file_name'])[0]): x
@@ -90,6 +136,7 @@ class TopDownMpiiTrbDataset(TopDownBaseDataset):
         for anno in data['annotations']:
             newitem = cp.deepcopy(tmpl)
             image_id = anno['image_id']
+            newitem['bbox_id'] = anno['id']
             newitem['image_file'] = os.path.join(
                 self.img_prefix, imid2info[image_id]['file_name'])
 
@@ -115,6 +162,7 @@ class TopDownMpiiTrbDataset(TopDownBaseDataset):
             if 'headbox' in anno:
                 newitem['headbox'] = anno['headbox']
             gt_db.append(newitem)
+        gt_db = sorted(gt_db, key=lambda x: x['bbox_id'])
 
         return gt_db
 
@@ -149,15 +197,16 @@ class TopDownMpiiTrbDataset(TopDownBaseDataset):
             heatmap width: W
 
         Args:
-            outputs(list(preds, boxes, image_path, heatmap)):
+            outputs(list(preds, boxes, image_paths, heatmap)):
 
-                * preds(np.ndarray[1,K,3]): The first two dimensions are
+                * preds (np.ndarray[N,K,3]): The first two dimensions are
                   coordinates, score is the third dimension of the array.
-                * boxes(np.ndarray[1,6]): [center[0], center[1], scale[0]
+                * boxes (np.ndarray[N,6]): [center[0], center[1], scale[0]
                   , scale[1],area, score]
-                * image_path(list[str]): For example, ['0', '0',
-                  '0', '0', '0', '1', '1', '6', '3', '.', 'j', 'p', 'g']
+                * image_paths (list[str]): For example, ['/val2017/000000
+                  397133.jpg']
                 * heatmap (np.ndarray[N, K, H, W]): model output heatmap.
+                * bbox_ids (list[str]): For example, ['27407']
             res_folder(str): Path of directory to save the results.
             metric (str | list[str]): Metrics to be performed.
                 Defaults: 'PCKh'.
@@ -174,19 +223,27 @@ class TopDownMpiiTrbDataset(TopDownBaseDataset):
         res_file = os.path.join(res_folder, 'result_keypoints.json')
 
         kpts = []
+        for output in outputs:
+            preds = output['preds']
+            boxes = output['boxes']
+            image_paths = output['image_paths']
+            bbox_ids = output['bbox_ids']
 
-        for preds, boxes, image_path, _ in outputs:
-            str_image_path = ''.join(image_path)
-            image_id = int(osp.basename(osp.splitext(str_image_path)[0]))
+            batch_size = len(image_paths)
+            for i in range(batch_size):
+                str_image_path = image_paths[i]
+                image_id = int(osp.basename(osp.splitext(str_image_path)[0]))
 
-            kpts.append({
-                'keypoints': preds[0].tolist(),
-                'center': boxes[0][0:2].tolist(),
-                'scale': boxes[0][2:4].tolist(),
-                'area': float(boxes[0][4]),
-                'score': float(boxes[0][5]),
-                'image_id': image_id,
-            })
+                kpts.append({
+                    'keypoints': preds[i].tolist(),
+                    'center': boxes[i][0:2].tolist(),
+                    'scale': boxes[i][2:4].tolist(),
+                    'area': float(boxes[i][4]),
+                    'score': float(boxes[i][5]),
+                    'image_id': image_id,
+                    'bbox_id': bbox_ids[i]
+                })
+        kpts = self._sort_and_unique_bboxes(kpts)
 
         self._write_keypoint_results(kpts, res_file)
         info_str = self._report_metric(res_file)
@@ -230,3 +287,13 @@ class TopDownMpiiTrbDataset(TopDownBaseDataset):
         info_str.append(('Contour_acc', contour.item()))
         info_str.append(('PCKh', mean.item()))
         return info_str
+
+    def _sort_and_unique_bboxes(self, kpts, key='bbox_id'):
+        """sort kpts and remove the repeated ones."""
+        kpts = sorted(kpts, key=lambda x: x[key])
+        num = len(kpts)
+        for i in range(num - 1, 0, -1):
+            if kpts[i][key] == kpts[i - 1][key]:
+                del kpts[i]
+
+        return kpts

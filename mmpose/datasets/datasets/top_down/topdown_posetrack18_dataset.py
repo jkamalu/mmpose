@@ -1,5 +1,6 @@
 import os
 import os.path as osp
+import warnings
 from collections import OrderedDict, defaultdict
 
 import json_tricks as json
@@ -64,13 +65,17 @@ class TopDownPoseTrack18Dataset(TopDownCocoDataset):
 
         self.use_gt_bbox = data_cfg['use_gt_bbox']
         self.bbox_file = data_cfg['bbox_file']
-        self.image_thr = data_cfg['image_thr']
+        self.det_bbox_thr = data_cfg.get('det_bbox_thr', 0.0)
+        if 'image_thr' in data_cfg:
+            warnings.warn(
+                'image_thr is deprecated, '
+                'please use det_bbox_thr instead', DeprecationWarning)
+            self.det_bbox_thr = data_cfg['image_thr']
         self.use_nms = data_cfg.get('use_nms', True)
         self.soft_nms = data_cfg['soft_nms']
         self.nms_thr = data_cfg['nms_thr']
         self.oks_thr = data_cfg['oks_thr']
         self.vis_thr = data_cfg['vis_thr']
-        self.bbox_thr = data_cfg['bbox_thr']
 
         self.ann_info['flip_pairs'] = [[3, 4], [5, 6], [7, 8], [9, 10],
                                        [11, 12], [13, 14], [15, 16]]
@@ -86,6 +91,7 @@ class TopDownPoseTrack18Dataset(TopDownCocoDataset):
             ],
             dtype=np.float32).reshape((self.ann_info['num_joints'], 1))
 
+        # Adapted from COCO dataset
         self.sigmas = np.array([
             .26, .25, .25, .35, .35, .79, .79, .72, .72, .62, .62, 1.07, 1.07,
             .87, .87, .89, .89
@@ -121,14 +127,15 @@ class TopDownPoseTrack18Dataset(TopDownCocoDataset):
             num_keypoints: K
 
         Args:
-            outputs (list(preds, boxes, image_path))
-                :preds (np.ndarray[1,K,3]): The first two dimensions are
+            outputs (list(preds, boxes, image_paths))
+                :preds (np.ndarray[N,K,3]): The first two dimensions are
                     coordinates, score is the third dimension of the array.
-                :boxes (np.ndarray[1,6]): [center[0], center[1], scale[0]
+                :boxes (np.ndarray[N,6]): [center[0], center[1], scale[0]
                     , scale[1],area, score]
-                :image_path (list[str]): For example, [ '/', 'v','a', 'l',
-                    '2', '0', '1', '7', '/', '0', '0', '0', '0', '0',
-                    '0', '3', '9', '7', '1', '3', '3', '.', 'j', 'p', 'g']
+                :image_paths (list[str]): For example, ['val/010016_mpii_test
+                    /000024.jpg']
+                :heatmap (np.ndarray[N, K, H, W]): model output heatmap.
+                :bbox_id (list(int))
             res_folder (str): Path of directory to save the results.
             metric (str | list[str]): Metric to be performed. Defaults: 'mAP'.
 
@@ -148,18 +155,26 @@ class TopDownPoseTrack18Dataset(TopDownCocoDataset):
             osp.splitext(self.annotations_path.split('_')[-1])[0])
 
         kpts = defaultdict(list)
-        for preds, boxes, image_path, _ in outputs:
-            str_image_path = ''.join(image_path)
-            image_id = self.name2id[str_image_path[len(self.img_prefix):]]
 
-            kpts[image_id].append({
-                'keypoints': preds[0],
-                'center': boxes[0][0:2],
-                'scale': boxes[0][2:4],
-                'area': boxes[0][4],
-                'score': boxes[0][5],
-                'image_id': image_id,
-            })
+        for output in outputs:
+            preds = output['preds']
+            boxes = output['boxes']
+            image_paths = output['image_paths']
+            bbox_ids = output['bbox_ids']
+
+            batch_size = len(image_paths)
+            for i in range(batch_size):
+                image_id = self.name2id[image_paths[i][len(self.img_prefix):]]
+                kpts[image_id].append({
+                    'keypoints': preds[i],
+                    'center': boxes[i][0:2],
+                    'scale': boxes[i][2:4],
+                    'area': boxes[i][4],
+                    'score': boxes[i][5],
+                    'image_id': image_id,
+                    'bbox_id': bbox_ids[i]
+                })
+        kpts = self._sort_and_unique_bboxes(kpts)
 
         # rescoring and oks nms
         num_joints = self.ann_info['num_joints']
@@ -181,6 +196,7 @@ class TopDownPoseTrack18Dataset(TopDownCocoDataset):
                     kpt_score = kpt_score / valid_num
                 # rescoring
                 n_p['score'] = kpt_score * box_score
+
             if self.use_nms:
                 nms = soft_oks_nms if self.soft_nms else oks_nms
                 keep = nms(list(img_kpts), oks_thr, sigmas=self.sigmas)

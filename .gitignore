@@ -1,3 +1,8 @@
+# jkamalu additions
+slurm*
+output
+configs/jrdb/temp.py
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

@@ -1,30 +1,5 @@
 log_level = 'INFO'
-load_from = None
-resume_from = None
 dist_params = dict(backend='nccl')
-workflow = [('train', 1)]
-checkpoint_config = dict(interval=10)
-evaluation = dict(interval=10, metric='mAP', key_indicator='AP')
-
-optimizer = dict(
-    type='Adam',
-    lr=5e-4,
-)
-optimizer_config = dict(grad_clip=None)
-# learning policy
-lr_config = dict(
-    policy='step',
-    warmup='linear',
-    warmup_iters=500,
-    warmup_ratio=0.001,
-    step=[170, 200])
-total_epochs = 210
-log_config = dict(
-    interval=50,
-    hooks=[
-        dict(type='TextLoggerHook'),
-        # dict(type='TensorboardLoggerHook')
-    ])
 
 channel_cfg = dict(
     num_output_channels=17,
@@ -39,7 +14,7 @@ channel_cfg = dict(
 # model settings
 model = dict(
     type='TopDown',
-    pretrained='models/pytorch/imagenet/hrnet_w48-8ef0771d.pth',
+    pretrained='https://download.openmmlab.com/mmpose/pretrain_models/hrnet_w48-8ef0771d.pth',
     backbone=dict(
         type='HRNet',
         in_channels=3,
@@ -76,18 +51,14 @@ model = dict(
         num_deconv_layers=0,
         extra=dict(final_conv_kernel=1, ),
     ),
-    train_cfg=dict(),
     test_cfg=dict(
-        flip_test=True,
-        post_process=True,
+        flip_test=False,
+        post_process='unbiased',
         shift_heatmap=True,
-        unbiased_decoding=True,
-        modulate_kernel=11),
+        modulate_kernel=17),
     loss_pose=dict(type='JointsMSELoss', use_target_weight=True))
 
 data_cfg = dict(
-    # image_size=[192, 256],
-    # heatmap_size=[48, 64],
     image_size=[288, 384],
     heatmap_size=[72, 96],
     num_output_channels=channel_cfg['num_output_channels'],
@@ -101,36 +72,10 @@ data_cfg = dict(
     bbox_thr=1.0,
     use_gt_bbox=False,
     image_thr=0.0,
-    bbox_file='data/coco/person_detection_results/'
-    'COCO_val2017_detections_AP_H_56_person.json',
+    bbox_file=f'{path_to_data}/detections.json',
 )
 
-train_pipeline = [
-    dict(type='LoadImageFromFile'),
-    dict(type='TopDownRandomFlip', flip_prob=0.5),
-    dict(
-        type='TopDownHalfBodyTransform',
-        num_joints_half_body=8,
-        prob_half_body=0.3),
-    dict(
-        type='TopDownGetRandomScaleRotation', rot_factor=40, scale_factor=0.5),
-    dict(type='TopDownAffine'),
-    dict(type='ToTensor'),
-    dict(
-        type='NormalizeTensor',
-        mean=[0.485, 0.456, 0.406],
-        std=[0.229, 0.224, 0.225]),
-    dict(type='TopDownGenerateTarget', sigma=2, unbiased_encoding=True),
-    dict(
-        type='Collect',
-        keys=['img', 'target', 'target_weight'],
-        meta_keys=[
-            'image_file', 'joints_3d', 'joints_3d_visible', 'center', 'scale',
-            'rotation', 'bbox_score', 'flip_pairs'
-        ]),
-]
-
-val_pipeline = [
+test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='TopDownAffine'),
     dict(type='ToTensor'),
@@ -140,32 +85,19 @@ val_pipeline = [
         std=[0.229, 0.224, 0.225]),
     dict(
         type='Collect',
-        keys=[
-            'img',
-        ],
+        keys=['img'],
         meta_keys=[
-            'image_file', 'center', 'scale', 'rotation', 'bbox_score',
-            'flip_pairs'
+            'image_file', 'center', 'scale', 'rotation', 'bbox_score', 'flip_pairs'
         ]),
 ]
-
-test_pipeline = val_pipeline
-
-jrdb_scene = 'food-trucks-2019-02-12_0'
-data_root = f'/cvgl/u/jkamalu/jrdb_coco/{jrdb_scene}'
-
-data_cfg["bbox_file"] = f'{data_root}/detections.json'
-
-model["test_cfg"]["flip_test"] = False
-model["test_cfg"]["unbiased_decoding"] = False
 
 data = dict(
     samples_per_gpu=32,
     workers_per_gpu=2,
     test=dict(
         type='TopDownCocoDataset',
-        ann_file=f'{data_root}/annotations.json',
-        img_prefix=f'{data_root}/images',
+        ann_file=f'{path_to_data}/annotations.json',
+        img_prefix=f'{path_to_data}/images',
         data_cfg=data_cfg,
         pipeline=test_pipeline),
 )
